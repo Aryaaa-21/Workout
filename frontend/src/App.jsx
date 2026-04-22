@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { WatchWalletChanges } from "@stellar/freighter-api";
 import {
   configuredContractId,
   configuredNetworkPassphrase,
@@ -8,11 +7,13 @@ import {
   discoverWalletState,
   formatDate,
   formatMinutes,
+  getContractExplorerLink,
   getExplorerLink,
   getNetworkLabel,
   hasContractConfig,
   logWorkout,
   parseError,
+  readContractActivity,
   readDashboard,
   readRecentWorkouts,
   saveProfile,
@@ -84,6 +85,52 @@ function ActivitySkeleton() {
   );
 }
 
+function ActivityFeed({ activities, loading, walletAccount }) {
+  if (loading) {
+    return <ActivitySkeleton />;
+  }
+
+  if (!activities?.length) {
+    return (
+      <p className="empty-state">
+        Waiting for recent contract events. Activity appears here as soon as Stellar writes land.
+      </p>
+    );
+  }
+
+  return (
+    <div className="activity-feed">
+      {activities.map((activity) => {
+        const ownActivity = walletAccount && activity.athlete === walletAccount;
+
+        return (
+          <article
+            className={`activity-card activity-${activity.accent}${ownActivity ? " activity-own" : ""}`}
+            key={activity.id}
+          >
+            <div className="activity-topline">
+              <span className="activity-badge">{activity.badge}</span>
+              <span className="activity-athlete">
+                {ownActivity ? "Your wallet" : shortAddress(activity.athlete)}
+              </span>
+            </div>
+            <h3>{activity.title}</h3>
+            <p>{activity.detail}</p>
+            <div className="activity-meta">
+              <span>{formatDate(activity.timestamp)}</span>
+              {activity.explorerLink ? (
+                <a href={activity.explorerLink} target="_blank" rel="noreferrer">
+                  View tx
+                </a>
+              ) : null}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function App() {
   const queryClient = useQueryClient();
   const [wallet, setWallet] = useState(emptyWallet);
@@ -128,15 +175,29 @@ export default function App() {
       }
     }
 
-    syncWallet();
+    async function startWatcher() {
+      if (typeof window === "undefined") {
+        return;
+      }
 
-    if (typeof window !== "undefined") {
-      watcher = new WatchWalletChanges(3000);
-      watcher.watch(() => {
-        setTxState(emptyTx);
-        syncWallet();
-      });
+      try {
+        const { WatchWalletChanges } = await import("@stellar/freighter-api");
+        if (!isMounted) {
+          return;
+        }
+
+        watcher = new WatchWalletChanges(3000);
+        watcher.watch(() => {
+          setTxState(emptyTx);
+          syncWallet();
+        });
+      } catch {
+        watcher = null;
+      }
     }
+
+    syncWallet();
+    startWatcher();
 
     return () => {
       isMounted = false;
@@ -147,6 +208,8 @@ export default function App() {
   const wrongNetwork =
     Boolean(wallet.networkPassphrase) && wallet.networkPassphrase !== configuredNetworkPassphrase;
   const readyForReads = Boolean(wallet.account) && hasContractConfig() && !wrongNetwork;
+  const readyForWrites = Boolean(wallet.account) && hasContractConfig() && !wrongNetwork;
+  const contractExplorerLink = getContractExplorerLink();
 
   const dashboardQuery = useQuery({
     queryKey: ["dashboard", wallet.account, wallet.networkPassphrase],
@@ -155,9 +218,22 @@ export default function App() {
   });
 
   const workoutsQuery = useQuery({
-    queryKey: ["workouts", wallet.account, wallet.networkPassphrase, dashboardQuery.data?.sessionCount || 0],
+    queryKey: [
+      "workouts",
+      wallet.account,
+      wallet.networkPassphrase,
+      dashboardQuery.data?.sessionCount || 0
+    ],
     queryFn: () => readRecentWorkouts(wallet.account, 5),
     enabled: readyForReads && Boolean(dashboardQuery.data)
+  });
+
+  const activityQuery = useQuery({
+    queryKey: ["activity", configuredContractId],
+    queryFn: () => readContractActivity(8),
+    enabled: hasContractConfig(),
+    staleTime: 10_000,
+    refetchInterval: 15_000
   });
 
   useEffect(() => {
@@ -184,6 +260,23 @@ export default function App() {
     );
   }, [dashboard]);
 
+  const activitySummary = useMemo(() => {
+    const activities = activityQuery.data || [];
+    const athletes = new Set(activities.map((activity) => activity.athlete).filter(Boolean));
+    const goalReachedCount = activities.filter((activity) => activity.kind === "weekly_goal_reached").length;
+    const workoutCount = activities.filter((activity) => activity.kind === "workout_logged").length;
+
+    return {
+      eventCount: activities.length,
+      athleteCount: athletes.size,
+      goalReachedCount,
+      workoutCount
+    };
+  }, [activityQuery.data]);
+
+  const queryError = activityQuery.error || dashboardQuery.error || workoutsQuery.error;
+  const txExplorerLink = getExplorerLink(wallet.networkPassphrase, txState.hash);
+
   async function runLedgerAction(action, pendingMessage, successMessage) {
     if (!wallet.account) {
       throw new Error("Connect Freighter before sending a transaction.");
@@ -204,7 +297,8 @@ export default function App() {
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["dashboard", wallet.account] }),
-        queryClient.invalidateQueries({ queryKey: ["workouts", wallet.account] })
+        queryClient.invalidateQueries({ queryKey: ["workouts", wallet.account] }),
+        queryClient.invalidateQueries({ queryKey: ["activity"] })
       ]);
 
       setTxState({
@@ -354,7 +448,16 @@ export default function App() {
     });
   }
 
-  const txExplorerLink = getExplorerLink(wallet.networkPassphrase, txState.hash);
+  const liveStatusMessage =
+    wallet.error ||
+    (wrongNetwork
+      ? `Connected to ${getNetworkLabel(wallet.networkPassphrase)}. Switch Freighter to ${getNetworkLabel(configuredNetworkPassphrase)}.`
+      : txState.message ||
+        (queryError
+          ? parseError(queryError)
+          : hasContractConfig()
+            ? "Ready to read and write workout sessions on Stellar."
+            : "Deploy the WorkoutForge contract and export the frontend config before using the app."));
 
   return (
     <div className="app-shell">
@@ -374,8 +477,8 @@ export default function App() {
 
           <p className="lead">
             Track your weekly training on Stellar with a wallet-backed athlete profile, live
-            workout streaks, and an auditable session ledger built for cardio, strength, yoga,
-            mobility, and every routine in between.
+            workout streaks, and a public contract activity feed that keeps the app useful even
+            before you connect a wallet.
           </p>
 
           <div className="hero-actions">
@@ -392,7 +495,7 @@ export default function App() {
             </button>
             <div className="hero-badges">
               <span className="pill">Soroban powered</span>
-              <span className="pill">Athlete ledger</span>
+              <span className="pill">Live contract pulse</span>
               <span className="pill">Workout streaks</span>
             </div>
           </div>
@@ -416,7 +519,13 @@ export default function App() {
 
           <div className="hero-side-stat">
             <span>Contract</span>
-            <strong>{configuredContractId ? shortAddress(configuredContractId) : "Not deployed"}</strong>
+            {contractExplorerLink ? (
+              <a className="contract-link" href={contractExplorerLink} target="_blank" rel="noreferrer">
+                {shortAddress(configuredContractId)}
+              </a>
+            ) : (
+              <strong>Not deployed</strong>
+            )}
           </div>
 
           <div className="progress-shell">
@@ -429,9 +538,20 @@ export default function App() {
             </div>
           </div>
 
+          <div className="hero-pulse">
+            <div>
+              <p className="side-label">Contract pulse</p>
+              <strong>{activitySummary.eventCount} recent events</strong>
+            </div>
+            <div>
+              <p className="side-label">Athletes active</p>
+              <strong>{activitySummary.athleteCount || 0}</strong>
+            </div>
+          </div>
+
           <p className="hero-note">
-            Keep your training momentum visible with wallet-based actions, on-chain workout logs,
-            and a simple dashboard that rewards consistency.
+            Auto-refresh keeps the public contract feed warm, while wallet-backed writes update
+            your profile, streaks, and workouts after each confirmed transaction.
           </p>
         </div>
       </header>
@@ -439,15 +559,7 @@ export default function App() {
       <section className="status-banner">
         <div>
           <p className="status-label">Live status</p>
-          <p className="status-copy">
-            {wallet.error ||
-              (wrongNetwork
-                ? `Connected to ${getNetworkLabel(wallet.networkPassphrase)}. Switch Freighter to ${getNetworkLabel(configuredNetworkPassphrase)}.`
-                : txState.message ||
-                  (hasContractConfig()
-                    ? "Ready to read and write workout sessions on Stellar."
-                    : "Deploy the WorkoutForge contract and export the frontend config before using the app."))}
-          </p>
+          <p className="status-copy">{liveStatusMessage}</p>
         </div>
         {txExplorerLink ? (
           <a className="status-link" href={txExplorerLink} target="_blank" rel="noreferrer">
@@ -456,11 +568,40 @@ export default function App() {
         ) : null}
       </section>
 
+      <section className="panel-grid panel-grid-activity">
+        <Panel
+          eyebrow="Public contract feed"
+          title="Live Soroban activity"
+          body="Recent events stream directly from the deployed contract on Stellar Testnet and refresh automatically every 15 seconds."
+          tone="recovery"
+        >
+          <div className="activity-summary">
+            <span className="pill pill-soft">{activitySummary.workoutCount} workouts logged</span>
+            <span className="pill pill-soft">{activitySummary.goalReachedCount} goals hit</span>
+            <span className="pill pill-soft">{activitySummary.athleteCount} active athletes</span>
+            {contractExplorerLink ? (
+              <a className="status-link" href={contractExplorerLink} target="_blank" rel="noreferrer">
+                View contract
+              </a>
+            ) : null}
+          </div>
+          <ActivityFeed
+            activities={activityQuery.data}
+            loading={activityQuery.isLoading}
+            walletAccount={wallet.account}
+          />
+        </Panel>
+      </section>
+
       <section className="metrics-grid">
         <MetricCard
           label="Workout logged"
           value={dashboard ? formatMinutes(dashboard.totalMinutes) : "0m"}
-          note={dashboard ? `${dashboard.sessionCount} chain-recorded sessions` : "Starts after your first workout"}
+          note={
+            dashboard
+              ? `${dashboard.sessionCount} chain-recorded sessions`
+              : "Starts after your first workout"
+          }
           loading={dashboardQuery.isLoading}
         />
         <MetricCard
@@ -548,11 +689,7 @@ export default function App() {
                 }
               />
             </label>
-            <button
-              className="button button-primary"
-              type="submit"
-              disabled={anyMutationPending || !wallet.account || !hasContractConfig()}
-            >
+            <button className="button button-primary" type="submit" disabled={anyMutationPending || !readyForWrites}>
               {saveProfileMutation.isPending ? "Saving..." : "Save profile"}
             </button>
           </form>
@@ -579,7 +716,7 @@ export default function App() {
             <button
               className="button button-secondary"
               type="submit"
-              disabled={anyMutationPending || !wallet.account || !dashboard || !hasContractConfig()}
+              disabled={anyMutationPending || !readyForWrites || !dashboard}
             >
               {updateGoalMutation.isPending ? "Updating..." : "Update goal"}
             </button>
@@ -589,7 +726,7 @@ export default function App() {
         <Panel
           eyebrow="Workout log"
           title="Record a training block"
-          body="Capture workout type, duration, and streak impact. The activity feed refreshes after every confirmed Soroban write."
+          body="Capture workout type, duration, and streak impact. The athlete dashboard and public event feed refresh after every confirmed Soroban write."
           tone="intensity"
         >
           <form className="form-grid" onSubmit={handleWorkoutSubmit}>
@@ -623,7 +760,7 @@ export default function App() {
             <button
               className="button button-primary"
               type="submit"
-              disabled={anyMutationPending || !wallet.account || !dashboard || !hasContractConfig()}
+              disabled={anyMutationPending || !readyForWrites || !dashboard}
             >
               {logWorkoutMutation.isPending ? "Logging..." : "Log workout"}
             </button>
@@ -659,7 +796,7 @@ export default function App() {
             <p className="empty-state">
               {dashboard
                 ? "Your workout feed will populate after the first logged session."
-                : "Create a profile first, then your recent workouts will appear here."}
+                : "Connect Freighter and create a profile to load your private athlete dashboard."}
             </p>
           )}
         </Panel>
@@ -667,14 +804,14 @@ export default function App() {
         <Panel
           eyebrow="Platform overview"
           title="How WorkoutForge works"
-          body="WorkoutForge combines Freighter wallet access, Soroban contract writes, and a clean training dashboard for tracking on-chain workout consistency."
+          body="WorkoutForge combines Freighter wallet access, Soroban contract writes, and a public activity stream so the app stays useful before and after wallet connection."
           tone="recovery"
         >
           <ul className="check-list">
             <li>Connect a Freighter wallet on Stellar Testnet</li>
             <li>Create an athlete profile and set a weekly workout goal</li>
             <li>Log cardio, strength, yoga, mobility, or custom sessions on-chain</li>
-            <li>Track workout totals, weekly progress, and active streak momentum</li>
+            <li>Track workouts, streaks, and weekly-goal achievements in a live contract feed</li>
           </ul>
         </Panel>
       </section>

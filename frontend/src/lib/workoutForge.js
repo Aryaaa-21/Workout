@@ -1,11 +1,3 @@
-import {
-  getAddress,
-  getNetworkDetails,
-  isConnected,
-  setAllowed,
-  signTransaction
-} from "@stellar/freighter-api";
-import { contract as StellarContract } from "@stellar/stellar-sdk";
 import { workoutForgeConfig } from "./contract-config";
 
 const networkLabels = {
@@ -13,6 +5,9 @@ const networkLabels = {
   "Test SDF Network ; September 2015": "Stellar Testnet",
   standalone: "Stellar Local"
 };
+
+let freighterApiPromise;
+let stellarSdkPromise;
 
 export const configuredContractId =
   import.meta.env.VITE_CONTRACT_ID || workoutForgeConfig.fallbackContractId || "";
@@ -45,6 +40,24 @@ function normalizeWorkout(index, workout) {
   };
 }
 
+function allowHttpRpc(url) {
+  try {
+    return new URL(url).protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+async function loadFreighterApi() {
+  freighterApiPromise ||= import("@stellar/freighter-api");
+  return freighterApiPromise;
+}
+
+async function loadStellarSdk() {
+  stellarSdkPromise ||= import("@stellar/stellar-sdk");
+  return stellarSdkPromise;
+}
+
 async function buildClient(account = "") {
   if (!hasContractConfig()) {
     throw new Error(
@@ -52,16 +65,28 @@ async function buildClient(account = "") {
     );
   }
 
+  const { contract: StellarContract } = await loadStellarSdk();
   return StellarContract.Client.from({
     contractId: configuredContractId,
     rpcUrl: configuredRpcUrl,
     networkPassphrase: configuredNetworkPassphrase,
     publicKey: account || undefined,
-    signTransaction
+    signTransaction: async (...args) => {
+      const { signTransaction } = await loadFreighterApi();
+      return signTransaction(...args);
+    }
+  });
+}
+
+async function buildRpcServer() {
+  const { rpc } = await loadStellarSdk();
+  return new rpc.Server(configuredRpcUrl, {
+    allowHttp: allowHttpRpc(configuredRpcUrl)
   });
 }
 
 async function getWalletSnapshot() {
+  const { getAddress, getNetworkDetails } = await loadFreighterApi();
   const [addressResult, networkResult] = await Promise.all([getAddress(), getNetworkDetails()]);
 
   if (addressResult.error) {
@@ -80,12 +105,114 @@ async function getWalletSnapshot() {
   };
 }
 
+function normalizeActivityEvent(event, scValToNative) {
+  const [kindValue, athleteValue = ""] = event.topic.map((topic) => scValToNative(topic));
+  const payload = scValToNative(event.value) || {};
+  const kind = String(kindValue || "activity");
+  const athlete = typeof athleteValue === "string" ? athleteValue : String(athleteValue || "");
+  const timestamp = event.ledgerClosedAt
+    ? Math.floor(new Date(event.ledgerClosedAt).getTime() / 1000)
+    : 0;
+
+  const common = {
+    id: event.id,
+    kind,
+    athlete,
+    ledger: Number(event.ledger || 0),
+    timestamp,
+    txHash: event.txHash || "",
+    explorerLink: getExplorerLink(configuredNetworkPassphrase, event.txHash || "")
+  };
+
+  if (kind === "profile_saved") {
+    const weeklyGoalMinutes = Number(payload.weekly_goal_minutes || 0);
+    return {
+      ...common,
+      title: "Profile saved",
+      accent: "energy",
+      detail: `${payload.display_name} committed to ${formatMinutes(weeklyGoalMinutes)} every week.`,
+      badge: `Goal ${formatMinutes(weeklyGoalMinutes)}`
+    };
+  }
+
+  if (kind === "weekly_goal_updated") {
+    const weeklyGoalMinutes = Number(payload.weekly_goal_minutes || 0);
+    return {
+      ...common,
+      title: "Weekly goal updated",
+      accent: "recovery",
+      detail: `${shortAddress(athlete)} retuned the target to ${formatMinutes(weeklyGoalMinutes)}.`,
+      badge: `Goal ${formatMinutes(weeklyGoalMinutes)}`
+    };
+  }
+
+  if (kind === "weekly_goal_reached") {
+    const minutesThisWeek = Number(payload.minutes_this_week || 0);
+    const currentStreak = Number(payload.current_streak || 0);
+    return {
+      ...common,
+      title: "Weekly goal reached",
+      accent: "recovery",
+      detail: `${shortAddress(athlete)} cleared ${formatMinutes(minutesThisWeek)} this week.`,
+      badge: `Streak ${currentStreak} day${currentStreak === 1 ? "" : "s"}`
+    };
+  }
+
+  if (kind === "workout_logged") {
+    const minutesSpent = Number(payload.minutes_spent || 0);
+    const minutesThisWeek = Number(payload.minutes_this_week || 0);
+    const currentStreak = Number(payload.current_streak || 0);
+    return {
+      ...common,
+      title: `${payload.workout_type} logged`,
+      accent: "intensity",
+      detail: `${shortAddress(athlete)} added ${formatMinutes(minutesSpent)}. Weekly total ${formatMinutes(minutesThisWeek)}.`,
+      badge: `Streak ${currentStreak} day${currentStreak === 1 ? "" : "s"}`
+    };
+  }
+
+  return {
+    ...common,
+    title: "Contract activity",
+    accent: "energy",
+    detail: `${shortAddress(athlete)} triggered ${kind.replaceAll("_", " ")}.`,
+    badge: `Ledger ${event.ledger}`
+  };
+}
+
+async function submitTransaction(assembledTx) {
+  const sentTx = await assembledTx.signAndSend();
+  return {
+    hash: sentTx.sendTransactionResponse?.hash || sentTx.getTransactionResponse?.txHash || "",
+    result: sentTx.result
+  };
+}
+
 export function hasContractConfig() {
   return Boolean(configuredContractId);
 }
 
 export function getNetworkLabel(networkPassphrase) {
   return networkLabels[networkPassphrase] || "Custom Stellar Network";
+}
+
+export function getContractExplorerLink(
+  networkPassphrase = configuredNetworkPassphrase,
+  contractId = configuredContractId
+) {
+  if (!contractId) {
+    return "";
+  }
+
+  if (networkPassphrase === "Test SDF Network ; September 2015") {
+    return `https://lab.stellar.org/r/testnet/contract/${contractId}`;
+  }
+
+  if (networkPassphrase === "Public Global Stellar Network ; September 2015") {
+    return `https://lab.stellar.org/r/mainnet/contract/${contractId}`;
+  }
+
+  return "";
 }
 
 export function shortAddress(value = "") {
@@ -155,6 +282,7 @@ export function parseError(error) {
 }
 
 export async function discoverWalletState() {
+  const { isConnected } = await loadFreighterApi();
   const connection = await isConnected();
   if (connection.error || !connection.isConnected) {
     return {
@@ -169,6 +297,7 @@ export async function discoverWalletState() {
 }
 
 export async function connectWallet() {
+  const { setAllowed } = await loadFreighterApi();
   const permission = await setAllowed();
   if (permission.error) {
     throw new Error(permission.error.message);
@@ -213,15 +342,29 @@ export async function readRecentWorkouts(account, limit = 5) {
   return workoutResults;
 }
 
-async function submitTransaction(assembledTx) {
-  const sentTx = await assembledTx.signAndSend();
-  return {
-    hash:
-      sentTx.sendTransactionResponse?.hash ||
-      sentTx.getTransactionResponse?.txHash ||
-      "",
-    result: sentTx.result
-  };
+export async function readContractActivity(limit = 8) {
+  if (!hasContractConfig()) {
+    return [];
+  }
+
+  const [{ scValToNative }, server] = await Promise.all([loadStellarSdk(), buildRpcServer()]);
+  const latestLedger = await server.getLatestLedger();
+  const response = await server.getEvents({
+    startLedger: Math.max(Number(latestLedger.sequence || 0) - 20_000, 1),
+    filters: [
+      {
+        type: "contract",
+        contractIds: [configuredContractId]
+      }
+    ],
+    limit: Math.min(Math.max(limit * 3, 18), 40)
+  });
+
+  return response.events
+    .filter((event) => event.inSuccessfulContractCall)
+    .map((event) => normalizeActivityEvent(event, scValToNative))
+    .sort((left, right) => right.ledger - left.ledger)
+    .slice(0, limit);
 }
 
 export async function saveProfile(account, displayName, weeklyGoalMinutes) {
