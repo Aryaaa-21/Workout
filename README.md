@@ -15,11 +15,19 @@ WorkoutForge is a Stellar Soroban mini-dApp for tracking workout consistency on-
 
 ### Screenshots
 
+#### UI Screenshot
+
 ![WorkoutForge UI](./UI.png)
+
+#### Mobile UI Screenshot
 
 ![WorkoutForge mobile responsive view](./mobile.png)
 
+#### CI/CD Screenshot
+
 ![WorkoutForge CI/CD pipeline](./ci%20cd.png)
+
+#### Contract Test Output Screenshot
 
 ![Contract test output](./test.png)
 
