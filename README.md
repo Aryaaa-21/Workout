@@ -14,6 +14,11 @@ WorkoutForge is a Stellar Soroban mini-dApp for tracking workout consistency on-
 
 ![WorkoutForge UI](./UI.png)
 
+### Contract Test Output
+
+![Contract test output](./test.png)
+
+
 ## Demo Recording
 
 [Watch the WorkoutForge walkthrough video](https://drive.google.com/file/d/1OZidabAbTpQbPzAWuHWJCuFjaiRoVYAb/view?usp=sharing)
@@ -230,9 +235,6 @@ Completed local checks:
 - `npm run export:frontend`
 - Vercel production deploy to `https://workoutforge-ledger-frontend.vercel.app`
 
-### Contract Test Output
-
-![Contract test output](./test.png)
 
 ## Notes
 
