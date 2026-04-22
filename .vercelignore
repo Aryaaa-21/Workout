@@ -7,6 +7,9 @@ frontend/dist/
 coverage/
 cache/
 artifacts/
+assets/
+demovideo.mp4
 screenrecord.mp4
 UI.png
+test.png
 test/
