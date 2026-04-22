@@ -13,9 +13,15 @@ WorkoutForge is a Stellar Soroban mini-dApp for tracking workout consistency on-
 
 ## Submission Proof
 
-### Mobile Responsive Screenshot
+### Screenshots
 
-![WorkoutForge mobile responsive view](./assets/mobile-responsive.png)
+![WorkoutForge UI](./UI.png)
+
+![WorkoutForge mobile responsive view](./mobile.png)
+
+![WorkoutForge CI/CD pipeline](./ci%20cd.png)
+
+![Contract test output](./test.png)
 
 ### CI/CD Pipeline
 
@@ -90,10 +96,6 @@ This submission does **not** use inter-contract calls. WorkoutForge is intention
 ### Custom Token / Pool
 
 This submission does **not** deploy a custom token or liquidity pool. There is therefore no token address or pool address to report for this project.
-
-## UI Preview
-
-![WorkoutForge UI](./UI.png)
 
 ## Local Setup
 
@@ -212,10 +214,6 @@ VITE_CONTRACT_ID=CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3
    - the public Soroban activity feed refreshes with the new event
 6. Inspect the transaction link shown in the status banner
 7. Confirm GitHub Actions passes on the latest `main` push
-
-## Contract Test Output
-
-![Contract test output](./test.png)
 
 ## Project Structure
 
