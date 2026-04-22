@@ -2,7 +2,7 @@ export const workoutForgeConfig = {
   "contractName": "WorkoutForge",
   "fallbackContractId": "CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3",
   "fallbackNetwork": "testnet",
-  "generatedAt": "2026-04-22T14:09:15.080Z",
+  "generatedAt": "2026-04-22T13:42:17.103Z",
   "limits": {
     "minWorkoutMinutes": 5,
     "maxWorkoutMinutes": 480,

@@ -28,7 +28,7 @@ const fileContents = `export const workoutForgeConfig = ${JSON.stringify(
     contractName: "WorkoutForge",
     fallbackContractId: deployment?.contractId || "",
     fallbackNetwork: deployment?.network || "testnet",
-    generatedAt: new Date().toISOString(),
+    generatedAt: deployment?.deployedAt || "",
     limits: {
       minWorkoutMinutes: 5,
       maxWorkoutMinutes: 480,
