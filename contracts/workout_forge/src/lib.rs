@@ -74,6 +74,16 @@ pub struct WorkoutLogged {
     pub current_streak: u32,
 }
 
+#[contractevent]
+#[derive(Clone)]
+pub struct WeeklyGoalReached {
+    #[topic]
+    pub athlete: Address,
+    pub weekly_goal_minutes: u32,
+    pub minutes_this_week: u32,
+    pub current_streak: u32,
+}
+
 #[derive(Clone)]
 #[contracttype]
 enum DataKey {
@@ -142,6 +152,7 @@ impl WorkoutForge {
 
         let mut profile = read_profile_required(&env, &athlete);
         sync_week(&mut profile, current_week(&env));
+        let had_reached_goal = profile.minutes_this_week >= profile.weekly_goal_minutes;
 
         let current_day = current_day(&env);
         if profile.session_count == 0 {
@@ -169,13 +180,23 @@ impl WorkoutForge {
         write_profile(&env, &athlete, &profile);
 
         WorkoutLogged {
-            athlete,
+            athlete: athlete.clone(),
             workout_type,
             minutes_spent,
             minutes_this_week: profile.minutes_this_week,
             current_streak: profile.current_streak,
         }
         .publish(&env);
+
+        if !had_reached_goal && profile.minutes_this_week >= profile.weekly_goal_minutes {
+            WeeklyGoalReached {
+                athlete: athlete.clone(),
+                weekly_goal_minutes: profile.weekly_goal_minutes,
+                minutes_this_week: profile.minutes_this_week,
+                current_streak: profile.current_streak,
+            }
+            .publish(&env);
+        }
     }
 
     pub fn has_profile(env: Env, athlete: Address) -> bool {
@@ -281,15 +302,18 @@ fn validate_weekly_goal(weekly_goal_minutes: u32) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use soroban_sdk::testutils::{Address as _, Ledger};
+    use soroban_sdk::{
+        testutils::{Address as _, Events, Ledger},
+        Event,
+    };
 
-    fn setup() -> (Env, WorkoutForgeClient<'static>, Address) {
+    fn setup() -> (Env, Address, WorkoutForgeClient<'static>, Address) {
         let env = Env::default();
         let contract_id = env.register(WorkoutForge, ());
         let client = WorkoutForgeClient::new(&env, &contract_id);
         let athlete = Address::generate(&env);
         env.mock_all_auths();
-        (env, client, athlete)
+        (env, contract_id, client, athlete)
     }
 
     fn text(env: &Env, value: &str) -> String {
@@ -298,7 +322,7 @@ mod test {
 
     #[test]
     fn creates_profile_and_reads_dashboard() {
-        let (env, client, athlete) = setup();
+        let (env, _, client, athlete) = setup();
 
         client.save_profile(&athlete, &text(&env, "Iron Atlas"), &360);
         let dashboard = client.get_dashboard(&athlete);
@@ -311,7 +335,7 @@ mod test {
 
     #[test]
     fn logs_workouts_and_grows_streak_across_days() {
-        let (env, client, athlete) = setup();
+        let (env, _, client, athlete) = setup();
 
         client.save_profile(&athlete, &text(&env, "Circuit Queen"), &300);
         client.log_workout(&athlete, &text(&env, "Cardio"), &90);
@@ -332,7 +356,7 @@ mod test {
 
     #[test]
     fn resets_weekly_progress_after_boundary() {
-        let (env, client, athlete) = setup();
+        let (env, _, client, athlete) = setup();
 
         client.save_profile(&athlete, &text(&env, "Tempo Titan"), &240);
         client.log_workout(&athlete, &text(&env, "Mobility"), &120);
@@ -347,21 +371,21 @@ mod test {
     #[test]
     #[should_panic(expected = "Profile not found")]
     fn rejects_missing_profile_workout_logs() {
-        let (env, client, athlete) = setup();
+        let (env, _, client, athlete) = setup();
         client.log_workout(&athlete, &text(&env, "No profile yet"), &60);
     }
 
     #[test]
     #[should_panic(expected = "Display name must be 3-32 chars")]
     fn rejects_short_display_names() {
-        let (env, client, athlete) = setup();
+        let (env, _, client, athlete) = setup();
         client.save_profile(&athlete, &text(&env, "AB"), &200);
     }
 
     #[test]
     #[should_panic(expected = "Workout minutes out of range")]
     fn rejects_short_workouts() {
-        let (env, client, athlete) = setup();
+        let (env, _, client, athlete) = setup();
         client.save_profile(&athlete, &text(&env, "Lift Loop"), &200);
         client.log_workout(&athlete, &text(&env, "Yoga"), &4);
     }
@@ -369,8 +393,37 @@ mod test {
     #[test]
     #[should_panic(expected = "Weekly goal out of range")]
     fn rejects_bad_goal_updates() {
-        let (env, client, athlete) = setup();
+        let (env, _, client, athlete) = setup();
         client.save_profile(&athlete, &text(&env, "Goal Guard"), &200);
         client.update_weekly_goal(&athlete, &20);
+    }
+
+    #[test]
+    fn emits_goal_reached_event_once_when_threshold_is_crossed() {
+        let (env, contract_id, client, athlete) = setup();
+
+        client.save_profile(&athlete, &text(&env, "Milestone Maven"), &120);
+        client.log_workout(&athlete, &text(&env, "Row"), &60);
+        client.log_workout(&athlete, &text(&env, "Sprint"), &60);
+
+        let goal_reached_event = WeeklyGoalReached {
+            athlete: athlete.clone(),
+            weekly_goal_minutes: 120,
+            minutes_this_week: 120,
+            current_streak: 1,
+        }
+        .to_xdr(&env, &contract_id);
+
+        let threshold_events = env.events().all().filter_by_contract(&contract_id);
+        assert_eq!(threshold_events.events().len(), 2);
+        assert_eq!(threshold_events.events()[1], goal_reached_event);
+
+        client.log_workout(&athlete, &text(&env, "Cooldown"), &30);
+        let post_goal_events = env.events().all().filter_by_contract(&contract_id);
+        assert_eq!(post_goal_events.events().len(), 1);
+
+        let dashboard = client.get_dashboard(&athlete);
+        assert!(dashboard.goal_reached_this_week);
+        assert_eq!(dashboard.minutes_this_week, 150);
     }
 }
