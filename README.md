@@ -1,78 +1,51 @@
 # WorkoutForge
 
-WorkoutForge is a Stellar Soroban mini-dApp for tracking workout consistency on-chain. Athletes connect a Freighter wallet, create a public profile, set a weekly workout-minute goal, and log individual workout sessions that update weekly progress and active streak data.
+[![CI](https://github.com/Aryaaa-21/Workout/actions/workflows/ci.yml/badge.svg)](https://github.com/Aryaaa-21/Workout/actions/workflows/ci.yml)
 
-## Submission Links
+WorkoutForge is a Stellar Soroban mini-dApp for tracking workout consistency on-chain. Athletes connect a Freighter wallet, create a public profile, set a weekly workout-minute goal, log workout sessions, and view a live contract activity feed backed by recent Soroban events from the deployed contract.
 
+## Live Demo
+
+- Public GitHub repository: `https://github.com/Aryaaa-21/Workout`
 - Live deployed app: `https://workoutforge-ledger-frontend.vercel.app`
-- Demo video: [WorkoutForge demo walkthrough](https://drive.google.com/file/d/1OZidabAbTpQbPzAWuHWJCuFjaiRoVYAb/view?usp=sharing)
-- Contract page: `https://lab.stellar.org/r/testnet/contract/CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3`
-- Testnet transaction 1: `https://stellar.expert/explorer/testnet/tx/d49c1b86a7577d61da3801bc278e6b4979fa64990bf6def77c405609ad29c2a0`
-- Testnet transaction 2: `https://stellar.expert/explorer/testnet/tx/74066eb14b5115be326cc52333ec5a5019a741c43a900b057877c690f345c924`
+- Latest production deployment: `https://workoutforge-ledger-frontend-10lag1nq2.vercel.app`
+- Demo video: [WorkoutForge walkthrough](https://drive.google.com/file/d/1OZidabAbTpQbPzAWuHWJCuFjaiRoVYAb/view?usp=sharing)
 
-## UI Preview
+## Submission Proof
 
-![WorkoutForge UI](./UI.png)
+### Mobile Responsive Screenshot
 
-### Contract Test Output
+![WorkoutForge mobile responsive view](./assets/mobile-responsive.png)
 
-![Contract test output](./test.png)
+### CI/CD Pipeline
 
+- GitHub Actions workflow: `https://github.com/Aryaaa-21/Workout/actions/workflows/ci.yml`
+- Badge above reflects the current CI state for the default branch
+- CI checks run:
+  - `npm ci`
+  - `cargo test --locked`
+  - `cargo build --locked --target wasm32v1-none --release -p workout_forge`
+  - `npm run lint`
+  - `npm run build:frontend`
 
-## Demo Recording
+## Project Overview
 
-[Watch the WorkoutForge walkthrough video](https://drive.google.com/file/d/1OZidabAbTpQbPzAWuHWJCuFjaiRoVYAb/view?usp=sharing)
+WorkoutForge focuses on one Soroban contract and a production-ready React frontend:
 
-## Deployment Details
+- Wallet-backed athlete profiles stored on Soroban
+- Weekly minute goals with validation and update flows
+- Workout logging with streak tracking and weekly resets
+- Live contract activity feed backed by Soroban RPC `getEvents`
+- Weekly-goal achievement event emitted on the exact threshold-crossing workout
+- Responsive UI deployed to Vercel
 
-- Network: `Stellar Testnet`
-- Contract alias: `workout_forge`
-- Contract ID: `CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3`
-- Contract explorer: `https://lab.stellar.org/r/testnet/contract/CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3`
-- Deployment timestamp: `2026-04-22T13:42:17.103Z`
+## Architecture
 
-## What The App Does
+### Soroban Contract
 
-Users can:
+Contract name: `WorkoutForge`
 
-- Connect a Freighter wallet
-- Create or update an athlete profile
-- Set a weekly workout goal in minutes
-- Log workout sessions on-chain
-- Track total minutes, weekly progress, and active streaks
-- Review recent workouts pulled from the deployed contract
-
-## Stack
-
-- Smart contract: Rust + Soroban SDK
-- Contract tooling: Stellar CLI
-- Frontend: React + Vite
-- Wallet: Freighter
-- Network access: Soroban RPC via `@stellar/stellar-sdk`
-- Data fetching: TanStack Query
-
-## Project Structure
-
-```text
-contracts/workout_forge/
-frontend/
-scripts/
-assets/
-Cargo.toml
-package.json
-README.md
-```
-
-## Contract Features
-
-The Soroban contract stores:
-
-- An athlete profile per Stellar address
-- Individual workout sessions by index
-- Weekly workout progress totals
-- Consecutive-day workout streaks
-
-Contract methods:
+Methods:
 
 - `save_profile(athlete, display_name, weekly_goal_minutes)`
 - `update_weekly_goal(athlete, new_goal_minutes)`
@@ -82,12 +55,45 @@ Contract methods:
 - `get_session(athlete, index)`
 - `has_profile(athlete)`
 
-Validation rules:
+Emitted events:
 
-- Display name: `3-32` chars
-- Workout type: `3-48` chars
-- Workout minutes: `5-480`
-- Weekly goal: `30-5000` minutes
+- `profile_saved`
+- `weekly_goal_updated`
+- `workout_logged`
+- `weekly_goal_reached`
+
+### Frontend
+
+- React + Vite
+- Freighter wallet integration
+- Soroban RPC reads and writes through `@stellar/stellar-sdk`
+- React Query for cached reads and auto-refreshing activity data
+- Lazy-loaded Stellar SDK to reduce the initial bundle
+
+## Deployment Details
+
+- Network: `Stellar Testnet`
+- Contract alias: `workout_forge`
+- Contract ID: `CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3`
+- Contract explorer: `https://lab.stellar.org/r/testnet/contract/CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3`
+- Deployment record: [deployments/testnet.json](./deployments/testnet.json)
+
+Sample testnet transactions:
+
+- Profile creation transaction: `https://stellar.expert/explorer/testnet/tx/6744fad42487a70ba8f4aad6d5e2d1fbda64d5202c406c1d891f52f9a2bc219a`
+- Workout logging transaction: `https://stellar.expert/explorer/testnet/tx/0c0527599f2e626454fb53c4e1e4b4f411e0da44359c814212ddffaed32012d6`
+
+### Inter-Contract Calls
+
+This submission does **not** use inter-contract calls. WorkoutForge is intentionally a single-contract app, and the Level 4 upgrade is delivered through richer contract events and live event streaming instead of adding artificial cross-contract complexity.
+
+### Custom Token / Pool
+
+This submission does **not** deploy a custom token or liquidity pool. There is therefore no token address or pool address to report for this project.
+
+## UI Preview
+
+![WorkoutForge UI](./UI.png)
 
 ## Local Setup
 
@@ -97,27 +103,9 @@ Validation rules:
 npm install
 ```
 
-### 2. Run contract tests
+### 2. Configure environment
 
-```powershell
-npm run contract:test
-```
-
-### 3. Build the Soroban contract
-
-```powershell
-npm run contract:build
-```
-
-This outputs:
-
-```text
-target/wasm32v1-none/release/workout_forge.wasm
-```
-
-### 4. Configure environment
-
-Copy `.env.example` to `.env` and set a Stellar CLI identity:
+Copy `.env.example` to `.env`:
 
 ```env
 STELLAR_ACCOUNT=alice
@@ -125,16 +113,10 @@ STELLAR_NETWORK=testnet
 STELLAR_CONTRACT_ALIAS=workout_forge
 VITE_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 VITE_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
-VITE_CONTRACT_ID=
-```
-
-For the deployed testnet instance in this repo, you can set:
-
-```env
 VITE_CONTRACT_ID=CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3
 ```
 
-### 5. Start the frontend locally
+### 3. Start the frontend
 
 ```powershell
 npm run dev
@@ -142,82 +124,75 @@ npm run dev
 
 Then open the Vite URL and connect Freighter on `Stellar Testnet`.
 
-## Deploy To Stellar Testnet
+## Build, Test, and Deploy
 
-### 1. Create and fund a testnet identity
+### Run contract tests
 
 ```powershell
-stellar keys generate alice --network testnet --fund
+npm run contract:test
 ```
 
-### 2. Build the contract
+### Build the contract wasm directly
+
+```powershell
+npm run contract:wasm
+```
+
+### Build with Stellar CLI
 
 ```powershell
 npm run contract:build
 ```
 
-### 3. Deploy the contract
+### Deploy to Stellar Testnet
 
 ```powershell
 npm run contract:deploy
 ```
 
-The deploy script wraps:
+This writes the deployment record to `deployments/testnet.json`.
 
-```powershell
-stellar contract deploy `
-  --wasm target/wasm32v1-none/release/workout_forge.wasm `
-  --source-account alice `
-  --network testnet `
-  --alias workout_forge
-```
-
-After deployment it writes:
-
-```text
-deployments/testnet.json
-```
-
-### 4. Export frontend config
+### Export frontend contract config
 
 ```powershell
 npm run export:frontend
 ```
 
-That updates:
-
-```text
-frontend/src/lib/contract-config.js
-```
-
-## Production Build
+### Lint the frontend
 
 ```powershell
-npm run build
+npm run lint
 ```
 
-This will:
+### Build the frontend bundle
 
-1. Build the Soroban contract
-2. Export the frontend config
-3. Build the React app into `frontend/dist`
+```powershell
+npm run build:frontend
+```
 
-## Vercel Deployment
+### Deploy the frontend to Vercel
 
-The frontend is deployed on Vercel.
+```powershell
+npm run deploy:frontend
+```
 
-- Live frontend: `https://workoutforge-ledger-frontend.vercel.app`
+The repository is already linked to the Vercel project `workoutforge-ledger-frontend`.
+
+## Vercel Configuration
+
+Root `vercel.json`:
+
 - Install command: `npm install`
 - Build command: `npm run build:frontend`
 - Output directory: `frontend/dist`
 
-Set these Vercel environment variables:
+Required Vercel environment variables:
 
 - `VITE_STELLAR_RPC_URL`
 - `VITE_STELLAR_NETWORK_PASSPHRASE`
 - `VITE_CONTRACT_ID`
 
-Recommended testnet values:
+Recommended values:
 
 ```env
 VITE_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
@@ -225,19 +200,39 @@ VITE_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 VITE_CONTRACT_ID=CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3
 ```
 
-## Verification
+## Verification Steps
 
-Completed local checks:
+1. Open the live app: `https://workoutforge-ledger-frontend.vercel.app`
+2. Confirm the public activity feed loads without a wallet
+3. Connect Freighter on Stellar Testnet
+4. Create or update a profile
+5. Log a workout and verify:
+   - the dashboard updates
+   - the recent workouts panel refreshes
+   - the public Soroban activity feed refreshes with the new event
+6. Inspect the transaction link shown in the status banner
+7. Confirm GitHub Actions passes on the latest `main` push
 
-- `npm run contract:test`
-- `npm run build`
-- `npm run contract:deploy`
-- `npm run export:frontend`
-- Vercel production deploy to `https://workoutforge-ledger-frontend.vercel.app`
+## Contract Test Output
 
+![Contract test output](./test.png)
+
+## Project Structure
+
+```text
+contracts/workout_forge/
+frontend/
+scripts/
+deployments/
+assets/
+.github/workflows/
+Cargo.toml
+package.json
+README.md
+```
 
 ## Notes
 
 - Freighter must be installed in the browser to submit transactions from the frontend.
-- If Brave blocks Freighter injection on localhost, Chrome or Edge may be more reliable for the demo flow.
-- The GitHub CLI currently has `barish245` authenticated locally; pushing under `Aryaaa-21` requires that account to be authenticated in `gh` first.
+- The app remains useful without a wallet because the live contract feed is public.
+- The contract config export is stable and does not rewrite timestamps unnecessarily when the deployment record is unchanged.
