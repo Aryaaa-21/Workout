@@ -5,18 +5,18 @@ WorkoutForge is a Stellar Soroban mini-dApp for tracking workout consistency on-
 ## Submission Links
 
 - Live deployed app: `https://workoutforge-ledger-frontend.vercel.app`
-- Demo video: [WorkoutForge demo walkthrough](./assets/workoutforge-demo.mp4)
+- Demo video: [WorkoutForge demo walkthrough](https://drive.google.com/file/d/1OZidabAbTpQbPzAWuHWJCuFjaiRoVYAb/view?usp=sharing)
 - Contract page: `https://lab.stellar.org/r/testnet/contract/CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3`
 - Testnet transaction 1: `https://stellar.expert/explorer/testnet/tx/d49c1b86a7577d61da3801bc278e6b4979fa64990bf6def77c405609ad29c2a0`
 - Testnet transaction 2: `https://stellar.expert/explorer/testnet/tx/74066eb14b5115be326cc52333ec5a5019a741c43a900b057877c690f345c924`
 
 ## UI Preview
 
-![WorkoutForge UI](./ui-workoutforge.svg)
+![WorkoutForge UI](./UI.png)
 
 ## Demo Recording
 
-[Watch the WorkoutForge walkthrough video](./assets/workoutforge-demo.mp4)
+[Watch the WorkoutForge walkthrough video](https://drive.google.com/file/d/1OZidabAbTpQbPzAWuHWJCuFjaiRoVYAb/view?usp=sharing)
 
 ## Deployment Details
 
@@ -232,7 +232,7 @@ Completed local checks:
 
 ### Contract Test Output
 
-![Contract test output](./assets/contract-test-output.svg)
+![Contract test output](./test.png)
 
 ## Notes
 
