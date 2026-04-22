@@ -1,0 +1,8 @@
+{
+  "contractName": "WorkoutForge",
+  "contractId": "CAZI7HJCJTUX75LYXZSMBQ2WEHAVBQ4AYYGVME5Y7SVTRYSBGLULINF3",
+  "network": "testnet",
+  "sourceAccount": "alice",
+  "alias": "workout_forge",
+  "deployedAt": "2026-04-22T13:42:17.103Z"
+}

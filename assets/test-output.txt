@@ -1,0 +1,14 @@
+running 7 tests
+test test::rejects_short_display_names - should panic ... ok
+test test::rejects_missing_profile_workout_logs - should panic ... ok
+test test::creates_profile_and_reads_dashboard ... ok
+test test::rejects_short_workouts - should panic ... ok
+test test::rejects_bad_goal_updates - should panic ... ok
+test test::resets_weekly_progress_after_boundary ... ok
+test test::logs_workouts_and_grows_streak_across_days ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+Doc-tests workout_forge
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
